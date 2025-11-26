@@ -68,7 +68,14 @@ class ReviewService:
                             "audience_fit": 0.0,
                             "integrity_penalty": 0.0,
                         },
+                        reasoning={},
+                        weights={
+                            "recency": 0.3,
+                            "velocity": 0.4,
+                            "audience_fit": 0.3,
+                        },
                         run_id="default",
+                        metadata={},
                     )
 
                 result.append(
@@ -104,15 +111,43 @@ class ReviewService:
                 # Batch into groups of 10 for "in" query
                 for i in range(0, len(topic_ids), 10):
                     batch_ids = topic_ids[i : i + 10]
-                    batch_scores = await self.firestore.query_collection(
-                        TOPIC_SCORES_COLLECTION,
-                        filters=[("topic_id", "in", batch_ids)],
-                        order_by="created_at",
-                        order_direction="DESCENDING",
-                    )
+                    try:
+                        # Try with order_by first (requires index)
+                        batch_scores = await self.firestore.query_collection(
+                            TOPIC_SCORES_COLLECTION,
+                            filters=[("topic_id", "in", batch_ids)],
+                            order_by="created_at",
+                            order_direction="DESCENDING",
+                        )
+                    except Exception as e:
+                        # If index missing, fetch without order_by and sort in memory
+                        logger.warning(f"Index missing for score query, sorting in memory: {e}")
+                        batch_scores = await self.firestore.query_collection(
+                            TOPIC_SCORES_COLLECTION,
+                            filters=[("topic_id", "in", batch_ids)],
+                        )
                     all_scores.extend(batch_scores)
 
-            # Group by topic_id and keep only latest
+            # Sort all scores by created_at descending (in memory to ensure latest first)
+            # Convert created_at to datetime for proper sorting
+            def get_score_timestamp(score_data: dict[str, Any]) -> float:
+                """Get timestamp for sorting."""
+                created_at = score_data.get("created_at")
+                if isinstance(created_at, str):
+                    try:
+                        from datetime import datetime
+
+                        dt = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+                        return dt.timestamp()
+                    except Exception:
+                        return 0.0
+                elif created_at is not None and hasattr(created_at, "timestamp"):
+                    return created_at.timestamp()  # type: ignore[union-attr]
+                return 0.0
+
+            all_scores.sort(key=get_score_timestamp, reverse=True)
+
+            # Group by topic_id and keep only latest (first after sorting)
             seen_topics: set[str] = set()
             for score_data in all_scores:
                 topic_id = score_data.get("topic_id")

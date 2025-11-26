@@ -12,6 +12,7 @@ from ..content.sources.manual import create_manual_topic
 from ..core import get_logger
 from ..infra import FirestoreService, GCSService
 from ..jobs.topic_ingestion_job import run_topic_ingestion
+from ..jobs.topic_scoring_job import run_topic_scoring
 
 app = typer.Typer()
 logger = get_logger(__name__)
@@ -98,6 +99,42 @@ def add_topic(
             raise typer.Exit(1) from e
 
     asyncio.run(_add())
+
+
+@app.command()
+def test_scoring() -> None:
+    """Test scoring system with fixtures (no external dependencies)."""
+    import sys
+    from pathlib import Path
+
+    # Import test function directly (more robust than subprocess)
+    backend_path = Path(__file__).parent.parent.parent
+    scripts_path = backend_path / "scripts" / "test_scoring.py"
+
+    if not scripts_path.exists():
+        logger.error(f"Test script not found: {scripts_path}")
+        raise typer.Exit(1)
+
+    # Add backend to path and run main
+    sys.path.insert(0, str(backend_path))
+    from scripts.test_scoring import main as test_main
+
+    logger.info("Running scoring test harness...")
+    exit_code = test_main()
+    raise typer.Exit(exit_code)
+
+
+@app.command()
+def score_topics(
+    limit: int = typer.Option(100, help="Maximum topics to score"),
+    min_age_hours: int = typer.Option(0, help="Minimum age in hours before scoring"),
+    status: str = typer.Option("pending", help="Topic status filter"),
+) -> None:
+    """Run topic scoring job."""
+    logger.info(
+        f"Running topic scoring (limit: {limit}, min_age: {min_age_hours}h, status: {status})..."
+    )
+    asyncio.run(run_topic_scoring(limit=limit, min_age_hours=min_age_hours, status=status))
 
 
 if __name__ == "__main__":

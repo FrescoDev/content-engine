@@ -132,7 +132,7 @@ export function AppShell({ children }: AppShellProps) {
       )}
 
       {/* Main content */}
-      <main className="flex-1 overflow-auto flex flex-col">
+      <main className="flex-1 overflow-hidden flex flex-col">
         <div className="lg:hidden sticky top-0 z-40 border-b border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80 px-4 py-3 flex items-center justify-between">
           <Button size="icon" variant="ghost" onClick={() => setMobileMenuOpen(true)} className="h-9 w-9">
             <Menu className="w-5 h-5" />

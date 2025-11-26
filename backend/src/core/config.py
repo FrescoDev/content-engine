@@ -18,6 +18,12 @@ class Settings(BaseSettings):
 
     # OpenAI Configuration
     openai_api_key: str | None = Field(default=None, description="OpenAI API Key")
+    enable_llm_scoring: bool = Field(
+        default=True, description="Enable LLM-based scoring (audience fit, integrity)"
+    )
+    max_llm_cost_per_run: float = Field(
+        default=1.0, description="Maximum cost in USD per scoring run (fail fast if exceeded)"
+    )
 
     # Environment
     environment: str = Field(default="local", description="Environment: local, staging, prod")

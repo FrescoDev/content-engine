@@ -63,6 +63,22 @@ export interface TopicScore {
     audience_fit: number
     integrity_penalty: number
   }
+  reasoning?: {
+    recency?: string
+    velocity?: string
+    audience_fit?: string
+    integrity_penalty?: string
+  }
+  weights?: {
+    recency?: number
+    velocity?: number
+    audience_fit?: number
+  }
+  metadata?: {
+    llm_used?: boolean
+    cost_usd?: number
+    [key: string]: any
+  }
   run_id: string
   created_at: string
 }

@@ -71,9 +71,25 @@ class TopicScore(BaseModel):
         ...,
         description="Score components (recency, velocity, audience_fit, integrity_penalty)",
     )
+    reasoning: dict[str, str] = Field(
+        default_factory=dict,
+        description="Human-readable explanation for each score component",
+    )
+    weights: dict[str, float] = Field(
+        default_factory=lambda: {
+            "recency": 0.3,
+            "velocity": 0.4,
+            "audience_fit": 0.3,
+        },
+        description="Weights used for composite score calculation",
+    )
     run_id: str = Field(..., description="Scoring run ID")
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc), description="Creation timestamp"
+    )
+    metadata: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Additional metadata (LLM costs, processing time, etc.)",
     )
 
     def to_firestore_dict(self) -> dict[str, Any]:
