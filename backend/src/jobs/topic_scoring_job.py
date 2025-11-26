@@ -166,7 +166,7 @@ class TopicScoringJob:
                 if not isinstance(score_result, dict):
                     raise ValueError(f"Invalid score_result type: {type(score_result)}")
                 if "score" not in score_result or "components" not in score_result:
-                    raise ValueError(f"Invalid score_result structure: missing required fields")
+                    raise ValueError("Invalid score_result structure: missing required fields")
 
                 # Validate components
                 components = score_result.get("components", {})

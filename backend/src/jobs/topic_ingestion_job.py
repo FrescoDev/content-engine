@@ -19,13 +19,9 @@ async def run_topic_ingestion(limit_per_source: int = 25) -> None:
         # Save to Firestore
         saved_count = await service.save_topics(topics)
         logger.info(f"Saved {saved_count} topics to Firestore")
-        
-        # Update job run metrics
-        job_run.metrics = {
-            "topics_ingested": len(topics),
-            "topics_saved": saved_count,
-        }
 
-        logger.info(
-            f"Topic ingestion job completed (run_id: {job_run.id}, saved: {saved_count})"
-        )
+        # Update job run metrics
+        job_run.topics_ingested = len(topics)
+        job_run.topics_saved = saved_count
+
+        logger.info(f"Topic ingestion job completed (run_id: {job_run.id}, saved: {saved_count})")
