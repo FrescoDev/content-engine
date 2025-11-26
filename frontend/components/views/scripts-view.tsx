@@ -33,58 +33,6 @@ import {
   Loader2,
 } from "lucide-react";
 
-const mockScripts = [
-  {
-    id: 1,
-    title: "Anthropic Releases Claude 3.5 with Extended Context",
-    cluster: "AI Infrastructure",
-    status: "options-ready",
-    optionsCount: 3,
-    hooks: [
-      "Claude 3.5 just dropped with 200K context—here's why that matters",
-      "Anthropic's latest release could change how we build AI apps",
-      "The context window wars just got more interesting",
-    ],
-    script: `Here's what makes Claude 3.5's 200K context window a big deal:
-
-1. You can now feed it entire codebases
-2. Long-form content analysis becomes practical
-3. Multi-document reasoning improves dramatically
-
-This isn't just a number bump—it's unlocking new use cases. Companies building AI assistants and research tools are about to have a field day.
-
-The race for longer context continues, but quality matters more than length. Anthropic's known for reliable outputs even at scale.`,
-    meta: {
-      prompt: "short_script_v1",
-      model: "gpt-4o-mini",
-    },
-  },
-  {
-    id: 2,
-    title: "Drake's Latest Album Strategy Reshapes Music Industry",
-    cluster: "Culture & Music",
-    status: "options-ready",
-    optionsCount: 2,
-    hooks: [
-      "Drake just changed the album drop game—again",
-      "The music industry is watching Drake's latest move closely",
-    ],
-    script: `Drake's surprise album strategy is creating a new playbook:
-
-• No traditional rollout
-• Direct-to-streaming release
-• Heavy social integration
-
-Why this matters: Labels are paying attention. The old PR cycle is getting disrupted by artists who understand platform algorithms better than marketing teams.
-
-This isn't just about one artist—it's about control shifting from labels to creators who know their audience.`,
-    meta: {
-      prompt: "short_script_v1",
-      model: "gpt-4o-mini",
-    },
-  },
-];
-
 export function ScriptsView() {
   const searchParams = useSearchParams();
   const topicId = searchParams.get("topic");
@@ -238,7 +186,11 @@ export function ScriptsView() {
               Scripts
             </h1>
             <p className="text-sm text-muted-foreground mt-1">
-              {mockScripts.length} topics pending script review
+              {loading
+                ? "Loading topics..."
+                : `${topicsWithOptions.length} topic${
+                    topicsWithOptions.length !== 1 ? "s" : ""
+                  } with scripts ready for review`}
             </p>
           </div>
           <Button>
