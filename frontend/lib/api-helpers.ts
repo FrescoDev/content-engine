@@ -10,8 +10,17 @@ import type { ApiResponse } from "./api-types"
 /**
  * Extract and verify auth token from request.
  * Throws error if unauthorized.
+ * In local development (NODE_ENV !== "production"), bypasses auth and returns mock user.
  */
 export async function requireAuth(request: NextRequest): Promise<{ uid: string; email?: string }> {
+    // Bypass auth in local development
+    if (process.env.NODE_ENV !== "production" || process.env.BYPASS_AUTH === "true") {
+        return {
+            uid: "dev-user",
+            email: "dev@local",
+        }
+    }
+
     const authHeader = request.headers.get("authorization")
     const token = authHeader?.replace("Bearer ", "") || null
     const user = await verifyAuthToken(token)

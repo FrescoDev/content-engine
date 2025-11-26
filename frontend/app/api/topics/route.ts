@@ -295,6 +295,14 @@ async function postTopicDecision(request: NextRequest) {
     const data = validationResult.data as TopicDecisionRequest
     const { firestore } = getFirebaseAdmin()
 
+    // Fetch score data before transaction (can't query inside transaction)
+    const scoreRef = firestore.collection("topic_scores")
+      .where("topic_id", "==", data.topic_id)
+      .orderBy("created_at", "desc")
+      .limit(1)
+    const scoreSnapshot = await scoreRef.get()
+    const latestScore = scoreSnapshot.docs[0]?.data() || null
+
     // Use transaction for atomic update with race condition protection
     const result = await firestore.runTransaction(async (transaction) => {
       const topicRef = firestore.collection("topic_candidates").doc(data.topic_id)
@@ -312,12 +320,17 @@ async function postTopicDecision(request: NextRequest) {
         throw new Error("TOPIC_ALREADY_PROCESSED")
       }
 
+      // Validate defer only on pending topics
+      if (data.action === "defer" && currentStatus !== "pending") {
+        throw new Error("CAN_ONLY_DEFER_PENDING")
+      }
+
       // Update topic status
       const newStatus =
         data.action === "approve" ? "approved" : data.action === "reject" ? "rejected" : "deferred"
       transaction.update(topicRef, { status: newStatus })
 
-      // Create audit event
+      // Create audit event with score data
       const auditRef = firestore.collection("audit_events").doc()
       const auditEvent = {
         id: auditRef.id,
@@ -325,14 +338,25 @@ async function postTopicDecision(request: NextRequest) {
         topic_id: data.topic_id,
         content_id: null,
         system_decision: {
-          ranked_ids: [data.topic_id], // Simplified - would come from scoring service
-          scoring_components: {}, // Would include actual scores
+          ranked_ids: [data.topic_id],
+          scoring_components: latestScore
+            ? {
+                score: latestScore.score,
+                recency: latestScore.components?.recency,
+                velocity: latestScore.components?.velocity,
+                audience_fit: latestScore.components?.audience_fit,
+                integrity_penalty: latestScore.components?.integrity_penalty,
+                reasoning: latestScore.reasoning || {},
+                weights: latestScore.weights || {},
+              }
+            : {},
         },
         human_action: {
           selected_ids: data.action === "approve" ? [data.topic_id] : [],
           rejected_ids: data.action === "reject" ? [data.topic_id] : [],
-          reason: data.reason,
-          reason_code: data.reason_code,
+          deferred_ids: data.action === "defer" ? [data.topic_id] : [],
+          ...(data.reason !== undefined && { reason: data.reason }),
+          ...(data.reason_code !== undefined && { reason_code: data.reason_code }),
         },
         actor: user.email || user.uid,
         created_at: new Date().toISOString(),
@@ -355,12 +379,55 @@ async function postTopicDecision(request: NextRequest) {
     if (error.message === "TOPIC_ALREADY_PROCESSED") {
       return errorResponse("Topic already processed", ApiErrorCode.TOPIC_ALREADY_PROCESSED, 409)
     }
+    if (error.message === "CAN_ONLY_DEFER_PENDING") {
+      return errorResponse(
+        "Can only defer pending topics",
+        ApiErrorCode.VALIDATION_ERROR,
+        400
+      )
+    }
 
     return errorResponse("Failed to process topic decision", ApiErrorCode.INTERNAL_ERROR, 500)
   }
 }
 
+async function getTopicCounts(request: NextRequest) {
+  try {
+    const { firestore } = getFirebaseAdmin()
+
+    // Fetch topics for each status (with reasonable limit for counting)
+    // Note: For large datasets, consider using Firestore count queries if available
+    const [pendingSnapshot, approvedSnapshot, rejectedSnapshot, deferredSnapshot] = await Promise.all([
+      firestore.collection("topic_candidates").where("status", "==", "pending").limit(1000).get(),
+      firestore.collection("topic_candidates").where("status", "==", "approved").limit(1000).get(),
+      firestore.collection("topic_candidates").where("status", "==", "rejected").limit(1000).get(),
+      firestore.collection("topic_candidates").where("status", "==", "deferred").limit(1000).get(),
+    ])
+
+    return successResponse({
+      pending: pendingSnapshot.size,
+      approved: approvedSnapshot.size,
+      rejected: rejectedSnapshot.size,
+      deferred: deferredSnapshot.size,
+    })
+  } catch (error: any) {
+    console.error("Error fetching topic counts:", error)
+    return errorResponse(
+      "Failed to fetch topic counts",
+      ApiErrorCode.INTERNAL_ERROR,
+      500
+    )
+  }
+}
+
 export async function GET(request: NextRequest) {
+  const { searchParams } = new URL(request.url)
+  
+  // If counts_only query param is present, return counts
+  if (searchParams.get("counts_only") === "true") {
+    return getTopicCounts(request)
+  }
+  
   return getTopics(request)
 }
 

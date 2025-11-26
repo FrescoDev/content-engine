@@ -26,6 +26,8 @@ import {
 import { useRouter } from "next/navigation";
 import type { TopicReviewItem } from "@/lib/api-types";
 import { formatDistanceToNow } from "date-fns";
+import { getIdToken } from "@/lib/auth-helpers";
+import { useToast } from "@/hooks/use-toast";
 
 // Transformed topic type for the view
 interface ViewTopic {
@@ -122,6 +124,7 @@ function transformTopicReviewItem(item: TopicReviewItem): ViewTopic {
 
 export function TodayView() {
   const router = useRouter();
+  const { toast } = useToast();
   const [topics, setTopics] = useState<ViewTopic[]>([]);
   const [selectedTopic, setSelectedTopic] = useState<ViewTopic | null>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -129,35 +132,69 @@ export function TodayView() {
   const [showMobileDetail, setShowMobileDetail] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState<string | null>(null); // topic_id being acted on
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [topicCounts, setTopicCounts] = useState({
+    pending: 0,
+    approved: 0,
+    rejected: 0,
+    deferred: 0,
+  });
+
+  // Fetch topic counts from API
+  const fetchTopicCounts = async () => {
+    try {
+      const response = await fetch("/api/topics?counts_only=true");
+      const data = await response.json();
+      if (data.success && data.data) {
+        setTopicCounts(data.data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch topic counts:", err);
+      // Don't show error for counts, just use defaults
+    }
+  };
 
   // Fetch topics from API
-  useEffect(() => {
-    const fetchTopics = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const response = await fetch("/api/topics?status=pending&limit=50");
-        const data = await response.json();
+  const fetchTopics = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/topics?status=pending&limit=50");
+      const data = await response.json();
 
-        if (data.success && data.data) {
-          const transformed = data.data.map(transformTopicReviewItem);
-          setTopics(transformed);
-          if (transformed.length > 0) {
+      if (data.success && data.data) {
+        const transformed = data.data.map(transformTopicReviewItem);
+        setTopics(transformed);
+        if (transformed.length > 0 && !selectedTopic) {
+          setSelectedTopic(transformed[0]);
+          setSelectedIndex(0);
+        } else if (selectedTopic) {
+          // Update selected topic if it still exists
+          const updated = transformed.find(
+            (t: ViewTopic) => t.id === selectedTopic.id
+          );
+          if (updated) {
+            setSelectedTopic(updated);
+          } else if (transformed.length > 0) {
             setSelectedTopic(transformed[0]);
             setSelectedIndex(0);
           }
-        } else {
-          setError(data.error?.error || "Failed to fetch topics");
         }
-      } catch (err) {
-        console.error("Failed to fetch topics:", err);
-        setError("Failed to fetch topics");
-      } finally {
-        setLoading(false);
+      } else {
+        setError(data.error?.error || "Failed to fetch topics");
       }
-    };
+    } catch (err) {
+      console.error("Failed to fetch topics:", err);
+      setError("Failed to fetch topics");
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  useEffect(() => {
     fetchTopics();
+    fetchTopicCounts();
   }, []);
 
   useEffect(() => {
@@ -202,33 +239,81 @@ export function TodayView() {
   }, [selectedTopic, selectedIndex, topics, rejectReason]);
 
   const handleApprove = async (id: string) => {
+    setActionLoading(id);
+    setActionError(null);
+
     try {
+      const token = await getIdToken();
+      const headers: HeadersInit = { "Content-Type": "application/json" };
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+
       const response = await fetch("/api/topics", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({ topic_id: id, action: "approve" }),
       });
 
-      if (response.ok) {
-        setTopics(
-          topics.map((t) => (t.id === id ? { ...t, status: "approved" } : t))
-        );
-        if (selectedTopic?.id === id) {
-          setSelectedTopic({ ...selectedTopic, status: "approved" });
+      const data = await response.json();
+
+      if (!response.ok) {
+        if (response.status === 409) {
+          setActionError("Topic already processed");
+          // Refresh to get latest status
+          await fetchTopics();
+          return;
         }
+        throw new Error(data.error?.error || "Failed to approve topic");
       }
+
+      // Optimistic update
+      setTopics(
+        topics.map((t) => (t.id === id ? { ...t, status: "approved" } : t))
+      );
+      if (selectedTopic?.id === id) {
+        setSelectedTopic({ ...selectedTopic, status: "approved" });
+      }
+
+      // Refresh to ensure consistency
+      await fetchTopics();
+      await fetchTopicCounts();
+
+      // Show success toast
+      toast({
+        variant: "success",
+        title: "Topic approved",
+        description: "The topic has been approved and moved to scripts.",
+      });
     } catch (err) {
       console.error("Failed to approve topic:", err);
+      setActionError(
+        err instanceof Error ? err.message : "Failed to approve topic"
+      );
+    } finally {
+      setActionLoading(null);
     }
   };
 
   const handleReject = async (id: string) => {
-    if (!rejectReason) return;
+    if (!rejectReason) {
+      setActionError("Please select a rejection reason");
+      return;
+    }
+
+    setActionLoading(id);
+    setActionError(null);
 
     try {
+      const token = await getIdToken();
+      const headers: HeadersInit = { "Content-Type": "application/json" };
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+
       const response = await fetch("/api/topics", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({
           topic_id: id,
           action: "reject",
@@ -237,44 +322,111 @@ export function TodayView() {
         }),
       });
 
-      if (response.ok) {
-        setTopics(
-          topics.map((t) => (t.id === id ? { ...t, status: "rejected" } : t))
-        );
-        if (selectedTopic?.id === id) {
-          setSelectedTopic({ ...selectedTopic, status: "rejected" });
+      const data = await response.json();
+
+      if (!response.ok) {
+        if (response.status === 409) {
+          setActionError("Topic already processed");
+          await fetchTopics();
+          return;
         }
-        setRejectReason("");
+        throw new Error(data.error?.error || "Failed to reject topic");
       }
+
+      // Optimistic update
+      setTopics(
+        topics.map((t) => (t.id === id ? { ...t, status: "rejected" } : t))
+      );
+      if (selectedTopic?.id === id) {
+        setSelectedTopic({ ...selectedTopic, status: "rejected" });
+      }
+      setRejectReason("");
+
+      // Refresh to ensure consistency
+      await fetchTopics();
+      await fetchTopicCounts();
+
+      // Show success toast
+      toast({
+        variant: "success",
+        title: "Topic rejected",
+        description: `Reason: ${rejectReason.replace(/_/g, " ")}`,
+      });
     } catch (err) {
       console.error("Failed to reject topic:", err);
+      setActionError(
+        err instanceof Error ? err.message : "Failed to reject topic"
+      );
+    } finally {
+      setActionLoading(null);
     }
   };
 
   const handleDefer = async (id: string) => {
+    setActionLoading(id);
+    setActionError(null);
+
     try {
+      const token = await getIdToken();
+      const headers: HeadersInit = { "Content-Type": "application/json" };
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+
       const response = await fetch("/api/topics", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({ topic_id: id, action: "defer" }),
       });
 
-      if (response.ok) {
-        setTopics(
-          topics.map((t) => (t.id === id ? { ...t, status: "deferred" } : t))
-        );
-        if (selectedTopic?.id === id) {
-          setSelectedTopic({ ...selectedTopic, status: "deferred" });
+      const data = await response.json();
+
+      if (!response.ok) {
+        if (response.status === 400 && data.error?.error?.includes("defer")) {
+          setActionError("Can only defer pending topics");
+          await fetchTopics();
+          return;
         }
+        if (response.status === 409) {
+          setActionError("Topic already processed");
+          await fetchTopics();
+          return;
+        }
+        throw new Error(data.error?.error || "Failed to defer topic");
       }
+
+      // Optimistic update
+      setTopics(
+        topics.map((t) => (t.id === id ? { ...t, status: "deferred" } : t))
+      );
+      if (selectedTopic?.id === id) {
+        setSelectedTopic({ ...selectedTopic, status: "deferred" });
+      }
+
+      // Refresh to ensure consistency
+      await fetchTopics();
+      await fetchTopicCounts();
+
+      // Show success toast
+      toast({
+        variant: "success",
+        title: "Topic deferred",
+        description: "The topic has been deferred for later review.",
+      });
     } catch (err) {
       console.error("Failed to defer topic:", err);
+      setActionError(
+        err instanceof Error ? err.message : "Failed to defer topic"
+      );
+    } finally {
+      setActionLoading(null);
     }
   };
 
-  const approvedCount = topics.filter((t) => t.status === "approved").length;
-  const rejectedCount = topics.filter((t) => t.status === "rejected").length;
-  const remainingCount = topics.filter((t) => t.status === "pending").length;
+  // Use accurate counts from API
+  const approvedCount = topicCounts.approved;
+  const rejectedCount = topicCounts.rejected;
+  const remainingCount = topicCounts.pending;
 
   if (loading) {
     return (
@@ -320,8 +472,7 @@ export function TodayView() {
                 day: "numeric",
                 month: "short",
               })}{" "}
-              · {topics.length} candidates · {approvedCount} / 6 slots filled ·
-              ~{remainingCount} left
+              · {topics.length} candidates · {remainingCount} pending
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-3 lg:gap-4 text-sm">

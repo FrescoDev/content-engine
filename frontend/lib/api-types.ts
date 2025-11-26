@@ -93,6 +93,17 @@ export interface ContentOption {
   model: string
   metadata: Record<string, any>
   created_at: string
+  // Enhanced fields for script editing (MVP)
+  edited_content?: string | null
+  edited_at?: string | null
+  editor_id?: string | null
+  edit_history?: Array<{
+    timestamp: string
+    editor_id: string
+    change_type: "manual_edit" | "ai_refinement"
+    refinement_type?: "tighten" | "casual" | "regenerate"
+  }> | null
+  refinement_applied?: string[] | null
 }
 
 // Topic Review Item Response

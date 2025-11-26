@@ -81,4 +81,3 @@ async def track_job_run(
             logger.error(f"Failed to save failed job run record: {save_error}")
 
         raise
-

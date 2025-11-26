@@ -37,4 +37,38 @@ npm run dev
 - Keyboard shortcuts for efficient review
 - Real-time updates from Firestore
 - Audit trail visualization
+- Script editing and refinement
+  - AI-driven script refinement (tighten, casual, regenerate)
+  - Manual script editing with auto-save
+  - Hook selection for scripts
+  - Platform-specific variants (YouTube Short, YouTube Long, TikTok)
+
+## Scripts Functionality
+
+The scripts view (`/scripts`) allows users to:
+1. **View Topics with Content Options** - Browse approved topics with generated hooks and scripts
+2. **Select Hooks** - Choose from multiple hook options for each script
+3. **Edit Scripts** - Manually edit script content with auto-save
+4. **Refine Scripts** - Use AI to refine scripts:
+   - **Tighten**: Make scripts more concise
+   - **Casual**: Adjust tone to be more conversational
+   - **Regenerate**: Generate fresh wording while keeping core message
+5. **Mark Ready** - Mark scripts as ready for publication
+6. **Flag for Ethics Review** - Flag scripts that need ethics review
+
+### API Endpoints
+
+- `GET /api/options` - Fetch topics with content options
+- `POST /api/scripts/refine` - Refine a script using AI
+- `PUT /api/scripts/[option_id]` - Update script content manually
+- `POST /api/options` - Mark script as ready or flag for ethics review
+
+### Environment Variables
+
+Create `.env.local` with:
+```bash
+OPENAI_API_KEY=your-key
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=your-project-id
+NEXT_PUBLIC_FIREBASE_DATABASE_ID=main-db
+```
 

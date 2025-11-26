@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation"
 import { LayoutDashboard, FileText, Shield, History, BarChart3, Sparkles, Menu, X, Settings } from "lucide-react"
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
+import { Toaster } from "@/components/ui/toaster"
 
 interface AppShellProps {
   children: ReactNode
@@ -147,6 +148,7 @@ export function AppShell({ children }: AppShellProps) {
         </div>
         {children}
       </main>
+      <Toaster />
     </div>
   )
 }

@@ -151,8 +151,8 @@ async function postIntegrityDecision(request: NextRequest) {
                 },
                 human_action: {
                     decision: data.decision,
-                    notes: data.notes,
-                    reframe_option: data.reframe_option,
+                    ...(data.notes !== undefined && { notes: data.notes }),
+                    ...(data.reframe_option !== undefined && { reframe_option: data.reframe_option }),
                 },
                 actor: user.email || user.uid,
                 created_at: new Date().toISOString(),

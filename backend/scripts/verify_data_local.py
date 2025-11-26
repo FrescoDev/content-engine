@@ -32,14 +32,14 @@ def format_topic(topic) -> str:
     lines.append(f"  Status: {topic.status}")
     lines.append(f"  Cluster: {topic.topic_cluster}")
     lines.append(f"  Created: {topic.created_at}")
-    
+
     if topic.entities:
         lines.append(f"  Entities: {', '.join(topic.entities[:5])}")
-    
+
     if topic.raw_payload:
         payload_str = json.dumps(topic.raw_payload, indent=2)[:200]
         lines.append(f"  Raw Payload: {payload_str}...")
-    
+
     return "\n".join(lines)
 
 
@@ -48,23 +48,23 @@ def simple_deduplicate(raw_topics: list[RawTopicData]) -> list[RawTopicData]:
     seen_urls = set()
     seen_titles = set()
     unique = []
-    
+
     for topic in raw_topics:
         url_key = topic.source_url.lower().strip() if topic.source_url else None
         title_key = topic.title.lower().strip() if topic.title else None
-        
+
         if url_key and url_key in seen_urls:
             continue
         if title_key and title_key in seen_titles:
             continue
-        
+
         if url_key:
             seen_urls.add(url_key)
         if title_key:
             seen_titles.add(title_key)
-        
+
         unique.append(topic)
-    
+
     return unique
 
 
@@ -78,20 +78,20 @@ async def verify_data_local() -> None:
     reddit = RedditIngestionSource()
     hackernews = HackerNewsIngestionSource()
     rss = RSSIngestionSource()
-    
+
     entity_extractor = EntityExtractor()
     clusterer = TopicClusterer()
 
     # Fetch from all sources
     logger.info("\n📥 Fetching topics from all sources...")
     all_raw_topics: list[RawTopicData] = []
-    
+
     sources = [
         ("reddit", reddit),
         ("hackernews", hackernews),
         ("rss", rss),
     ]
-    
+
     for source_name, source in sources:
         try:
             topics = await source.fetch_topics(limit=10)
@@ -115,26 +115,28 @@ async def verify_data_local() -> None:
     # Process and convert to TopicCandidate
     logger.info("\n⚙️  Processing topics (entity extraction, clustering)...")
     topics: list[TopicCandidate] = []
-    
+
     for raw_topic in unique_topics:
         try:
             # Extract entities
             entities = entity_extractor.extract_entities(raw_topic.title)
-            
+
             # Determine cluster
             cluster = clusterer.cluster_topic(raw_topic.title, entities)
-            
+
             # Generate ID (simple hash-based)
             import hashlib
+
             id_str = f"{raw_topic.source_platform}:{raw_topic.title}"
             topic_id = hashlib.md5(id_str.encode()).hexdigest()[:16]
-            
+
             # Create TopicCandidate
             from typing import Literal
+
             platform: Literal[
                 "youtube", "tiktok", "x", "news", "manual", "reddit", "hackernews", "rss"
             ] = raw_topic.source_platform  # type: ignore[assignment]
-            
+
             candidate = TopicCandidate(
                 id=topic_id,
                 source_platform=platform,
@@ -284,4 +286,3 @@ async def main() -> None:
 
 if __name__ == "__main__":
     asyncio.run(main())
-

@@ -27,7 +27,7 @@ def format_score_breakdown(result: dict[str, Any], topic_title: str) -> str:
     reasoning = result["reasoning"]
     score = result["score"]
     weights = result["weights"]
-    
+
     lines = [
         f"\n{'='*70}",
         f"Topic: {topic_title[:60]}",
@@ -50,7 +50,7 @@ def format_score_breakdown(result: dict[str, Any], topic_title: str) -> str:
         f"({weights['audience_fit']:.2f} × {components['audience_fit']:.3f}) + "
         f"{components['integrity_penalty']:.3f} = {score:.3f}",
     ]
-    
+
     return "\n".join(lines)
 
 
@@ -59,14 +59,14 @@ def main():
     logger.info("=" * 70)
     logger.info("TOPIC SCORING TEST HARNESS")
     logger.info("=" * 70)
-    
+
     # Create test topics
     test_topics = create_test_topics()
     logger.info(f"\nCreated {len(test_topics)} test topics")
-    
+
     # Initialize scoring service
     scoring_service = ScoringService()
-    
+
     # Score all topics
     results = []
     for topic in test_topics:
@@ -77,21 +77,21 @@ def main():
         except Exception as e:
             logger.error(f"Failed to score topic {topic.id}: {e}", exc_info=True)
             results.append((topic, None))
-    
+
     # Summary
     logger.info("\n" + "=" * 70)
     logger.info("SUMMARY")
     logger.info("=" * 70)
-    
+
     successful = [r for r in results if r[1] is not None]
     failed = [r for r in results if r[1] is None]
-    
+
     logger.info(f"✅ Successfully scored: {len(successful)}/{len(results)}")
     if failed:
         logger.warning(f"❌ Failed to score: {len(failed)} topics")
         for topic, _ in failed:
             logger.warning(f"  - {topic.id}: {topic.title}")
-    
+
     # Rank by score
     if successful:
         ranked = sorted(successful, key=lambda x: x[1]["score"], reverse=True)
@@ -101,14 +101,13 @@ def main():
                 f"  #{i}: {result['score']:.3f} - {topic.title[:50]} "
                 f"({topic.source_platform}, {topic.topic_cluster})"
             )
-    
+
     logger.info("\n" + "=" * 70)
     logger.info("Test complete!")
     logger.info("=" * 70)
-    
+
     return 0 if not failed else 1
 
 
 if __name__ == "__main__":
     sys.exit(main())
-

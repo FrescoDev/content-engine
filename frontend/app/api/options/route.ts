@@ -21,12 +21,54 @@ async function getOptions(request: NextRequest) {
         const { firestore } = getFirebaseAdmin()
 
         // Build topic query
-        let topicQuery = firestore.collection("topic_candidates").where("status", "==", "approved")
-
         if (topicId) {
-            topicQuery = firestore.collection("topic_candidates").where("__name__", "==", topicId)
+            // When a specific topic is requested, fetch it directly regardless of status
+            const topicDoc = await firestore.collection("topic_candidates").doc(topicId).get()
+
+            if (!topicDoc.exists) {
+                return successResponse<TopicWithOptions[]>([])
+            }
+
+            const topic = {
+                id: topicDoc.id,
+                ...topicDoc.data(),
+            }
+
+            // Fetch content options for this topic
+            const optionsSnapshot = await firestore
+                .collection("content_options")
+                .where("topic_id", "==", topicId)
+                .get()
+
+            const options = optionsSnapshot.docs.map((doc: firestore.QueryDocumentSnapshot) => {
+                const data = doc.data()
+                return {
+                    id: doc.id,
+                    topic_id: data.topic_id,
+                    option_type: data.option_type,
+                    content: data.content,
+                    created_at: data.created_at,
+                    metadata: data.metadata || {},
+                }
+            })
+
+            // Group options by type
+            const hooks = options.filter((opt) => opt.option_type === "short_hook") as any[]
+            const scripts = options.filter((opt) => opt.option_type === "short_script") as any[]
+
+            // Build response
+            const result: TopicWithOptions[] = [{
+                topic: topic as any,
+                hooks,
+                scripts,
+                status: "options-ready", // Default status
+            }]
+
+            return successResponse<TopicWithOptions[]>(result)
         }
 
+        // Otherwise, fetch approved topics
+        const topicQuery = firestore.collection("topic_candidates").where("status", "==", "approved")
         const topicsSnapshot = await topicQuery.limit(50).get()
         const topics = topicsSnapshot.docs.map((doc: firestore.QueryDocumentSnapshot) => ({
             id: doc.id,
@@ -188,8 +230,8 @@ async function postOptionSelection(request: NextRequest) {
                 human_action: {
                     selected_option_id: data.selected_option_id,
                     rejected_option_ids: [],
-                    reason_code: data.reason_code,
-                    notes: data.notes,
+                    ...(data.reason_code !== undefined && { reason_code: data.reason_code }),
+                    ...(data.notes !== undefined && { notes: data.notes }),
                     edited: !!data.edited_content,
                     diff: diff,
                 },

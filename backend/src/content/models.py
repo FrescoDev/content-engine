@@ -122,12 +122,31 @@ class ContentOption(BaseModel):
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc), description="Creation timestamp"
     )
+    # Enhanced fields for script editing (MVP)
+    edited_content: str | None = Field(
+        None, description="Edited content (null = original, set = edited)"
+    )
+    edited_at: datetime | None = Field(None, description="Timestamp of last edit")
+    editor_id: str | None = Field(None, description="User ID who edited")
+    edit_history: list[dict[str, Any]] | None = Field(
+        None,
+        description="Simple edit history: [{timestamp, editor_id, change_type, refinement_type?}]",
+    )
+    refinement_applied: list[str] | None = Field(
+        None, description="List of refinement types applied: ['tighten', 'casual', 'regenerate']"
+    )
 
     def to_firestore_dict(self) -> dict[str, Any]:
         """Convert to Firestore-compatible dictionary."""
         data = self.model_dump()
-        if isinstance(data.get("created_at"), datetime):
-            data["created_at"] = data["created_at"].isoformat()
+        for field in ["created_at", "edited_at"]:
+            if isinstance(data.get(field), datetime):
+                data[field] = data[field].isoformat()
+        # Handle edit_history timestamps
+        if data.get("edit_history"):
+            for entry in data["edit_history"]:
+                if isinstance(entry.get("timestamp"), datetime):
+                    entry["timestamp"] = entry["timestamp"].isoformat()
         return data
 
     @classmethod
@@ -137,8 +156,14 @@ class ContentOption(BaseModel):
         """Create from Firestore dictionary."""
         if doc_id:
             data["id"] = doc_id
-        if isinstance(data.get("created_at"), str):
-            data["created_at"] = datetime.fromisoformat(data["created_at"])
+        for field in ["created_at", "edited_at"]:
+            if isinstance(data.get(field), str):
+                data[field] = datetime.fromisoformat(data[field])
+        # Handle edit_history timestamps
+        if data.get("edit_history"):
+            for entry in data["edit_history"]:
+                if isinstance(entry.get("timestamp"), str):
+                    entry["timestamp"] = datetime.fromisoformat(entry["timestamp"])
         return cls(**data)
 
 

@@ -21,13 +21,22 @@ cp .env.example .env
 poetry run pytest
 ```
 
+5. Create test data for scripts functionality:
+```bash
+poetry run python scripts/create_content_options_for_topics.py --limit 5
+```
+
 ## Project Structure
 
 - `src/core/` - Core infrastructure (config, logging, types)
 - `src/infra/` - Infrastructure services (Firestore, GCS, OpenAI)
 - `src/content/` - Domain models and business logic
+  - `models.py` - Data models (TopicCandidate, ContentOption, PublishedContent, etc.)
+  - `script_refinement_service.py` - AI-driven script refinement service
 - `src/jobs/` - Cloud Run Job implementations
 - `src/cli/` - CLI commands
+- `scripts/` - Utility scripts
+  - `create_content_options_for_topics.py` - Generate ContentOptions for approved topics
 
 ## Development
 

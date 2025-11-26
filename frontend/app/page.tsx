@@ -1,6 +1,5 @@
-import { Redirect } from "@/components/redirect"
+import { Redirect } from "@/components/redirect";
 
 export default function HomePage() {
-  return <Redirect to="/today" />
+  return <Redirect to="/today" />;
 }
-
