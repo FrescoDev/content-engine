@@ -7,15 +7,26 @@ import asyncio
 import typer
 
 from ..content.ingestion_service import TopicIngestionService
-from ..content.models import TopicCandidate
+from ..content.models import (
+    STYLE_PROFILES_COLLECTION,
+    STYLISTIC_CONTENT_COLLECTION,
+    StylisticContent,
+    TopicCandidate,
+)
 from ..content.sources.manual import create_manual_topic
+from ..content.style_curation_service import StyleCurationService
+from ..content.style_extraction_service import StyleExtractionService
 from ..core import get_logger
 from ..infra import FirestoreService, GCSService
 from ..jobs.topic_ingestion_job import run_topic_ingestion
 from ..jobs.topic_scoring_job import run_topic_scoring
+from .review import review_app
 
 app = typer.Typer()
 logger = get_logger(__name__)
+
+# Add review subcommands
+app.add_typer(review_app, name="review")
 
 
 @app.command()
@@ -104,24 +115,11 @@ def add_topic(
 @app.command()
 def test_scoring() -> None:
     """Test scoring system with fixtures (no external dependencies)."""
-    import sys
-    from pathlib import Path
-
-    # Import test function directly (more robust than subprocess)
-    backend_path = Path(__file__).parent.parent.parent
-    scripts_path = backend_path / "scripts" / "test_scoring.py"
-
-    if not scripts_path.exists():
-        logger.error(f"Test script not found: {scripts_path}")
-        raise typer.Exit(1)
-
-    # Add backend to path and run main
-    sys.path.insert(0, str(backend_path))
-    from scripts.test_scoring import main as test_main
-
-    logger.info("Running scoring test harness...")
-    exit_code = test_main()
-    raise typer.Exit(exit_code)
+    # Note: test_scoring.py script not yet implemented
+    # Use pytest instead: poetry run pytest tests/ -v
+    logger.error("test_scoring command not yet implemented")
+    logger.info("Use: poetry run pytest tests/ -v")
+    raise typer.Exit(1)
 
 
 @app.command()
@@ -135,6 +133,225 @@ def score_topics(
         f"Running topic scoring (limit: {limit}, min_age: {min_age_hours}h, status: {status})..."
     )
     asyncio.run(run_topic_scoring(limit=limit, min_age_hours=min_age_hours, status=status))
+
+
+# Style management commands
+@app.command()
+def add_style_source(
+    source_url: str = typer.Option(..., "--url", "-u", help="Source URL (auto-detects type)"),
+    source_name: str | None = typer.Option(None, "--name", "-n", help="Optional custom name"),
+    description: str | None = typer.Option(
+        None, "--description", "-d", help="Optional description"
+    ),
+    tags: str | None = typer.Option(None, "--tags", help="Comma-separated tags"),
+    auto: bool = typer.Option(
+        True, "--auto/--no-auto", help="Automatically fetch content and extract styles"
+    ),
+) -> None:
+    """
+    Add a stylistic source from URL - fully automated.
+
+    Examples:
+        # Reddit subreddit
+        add-style-source --url "https://www.reddit.com/r/hiphopheads/"
+
+        # Podcast episode
+        add-style-source --url "https://podscripts.co/podcasts/the-joe-budden-podcast/episode-872-purple-eye"
+
+        # With custom name and tags
+        add-style-source --url "https://www.reddit.com/r/hiphopheads/" --name "Hip-Hop Heads" --tags "hip-hop,culture"
+    """
+    from ..content.stylistic_source_ingestion_service import StylisticSourceIngestionService
+
+    async def _add() -> None:
+        try:
+            async with StylisticSourceIngestionService() as service:
+                tags_list = tags.split(",") if tags else None
+
+                logger.info(f"Ingesting source from URL: {source_url}")
+                result = await service.ingest_from_url(
+                    url=source_url,
+                    source_name=source_name,
+                    description=description,
+                    tags=tags_list,
+                    auto_extract=auto,
+                )
+
+                if result["status"] == "success":
+                    logger.info(f"✓ Successfully ingested source: {result['source_id']}")
+                    logger.info(f"  Content items: {result['content_count']}")
+                    logger.info(f"  Style profiles: {result['profiles_created']}")
+                elif result["status"] == "partial":
+                    logger.warning(f"⚠ Partially ingested source: {result['source_id']}")
+                    logger.warning(f"  Content items: {result['content_count']}")
+                    logger.warning(f"  Style profiles: {result['profiles_created']}")
+                    if result["errors"]:
+                        logger.warning(f"  Errors: {', '.join(result['errors'])}")
+                else:
+                    logger.error("✗ Failed to ingest source")
+                    if result["errors"]:
+                        logger.error(f"  Errors: {', '.join(result['errors'])}")
+                    raise typer.Exit(1)
+
+        except Exception as e:
+            logger.error(f"Failed to ingest source: {e}")
+            raise typer.Exit(1) from e
+
+    asyncio.run(_add())
+
+
+@app.command()
+def list_style_profiles(
+    status: str = typer.Option(
+        "pending", "--status", "-s", help="Filter by status: pending, approved, rejected, all"
+    ),
+    limit: int = typer.Option(20, "--limit", "-l", help="Maximum profiles to show"),
+) -> None:
+    """List style profiles."""
+
+    async def _list() -> None:
+        try:
+            firestore = FirestoreService()
+
+            filters = []
+            if status != "all":
+                filters.append(("status", "==", status))
+
+            profiles_data = await firestore.query_collection(
+                STYLE_PROFILES_COLLECTION,
+                filters=filters,
+                limit=limit,
+                order_by="created_at",
+                order_direction="DESCENDING",
+            )
+
+            if not profiles_data:
+                logger.info("No profiles found")
+                return
+
+            logger.info(f"\nFound {len(profiles_data)} profiles:\n")
+            for data in profiles_data:
+                profile_id = data.get("id", "unknown")
+                source_name = data.get("source_name", "unknown")
+                tone = data.get("tone", "unknown")
+                profile_status = data.get("status", "unknown")
+                logger.info(f"  {profile_id[:20]}... | {source_name} | {tone} | {profile_status}")
+
+        except Exception as e:
+            logger.error(f"Failed to list profiles: {e}")
+            raise typer.Exit(1) from e
+
+    asyncio.run(_list())
+
+
+@app.command()
+def approve_style_profile(
+    profile_id: str = typer.Argument(..., help="Profile ID to approve"),
+    curator_id: str = typer.Option("cli-user", "--curator", "-c", help="Curator user ID"),
+    notes: str | None = typer.Option(None, "--notes", "-n", help="Optional notes"),
+) -> None:
+    """Approve a style profile."""
+
+    async def _approve() -> None:
+        try:
+            curation_service = StyleCurationService()
+            await curation_service.approve_profile(profile_id, curator_id, notes)
+            logger.info(f"✓ Approved profile: {profile_id}")
+        except Exception as e:
+            logger.error(f"Failed to approve profile: {e}")
+            raise typer.Exit(1) from e
+
+    asyncio.run(_approve())
+
+
+@app.command()
+def reject_style_profile(
+    profile_id: str = typer.Argument(..., help="Profile ID to reject"),
+    curator_id: str = typer.Option("cli-user", "--curator", "-c", help="Curator user ID"),
+    reason: str = typer.Option(..., "--reason", "-r", help="Rejection reason"),
+) -> None:
+    """Reject a style profile."""
+
+    async def _reject() -> None:
+        try:
+            curation_service = StyleCurationService()
+            await curation_service.reject_profile(profile_id, curator_id, reason)
+            logger.info(f"✓ Rejected profile: {profile_id}")
+        except Exception as e:
+            logger.error(f"Failed to reject profile: {e}")
+            raise typer.Exit(1) from e
+
+    asyncio.run(_reject())
+
+
+@app.command()
+def extract_styles(
+    content_id: str | None = typer.Option(
+        None, "--content-id", "-c", help="Extract from specific content ID"
+    ),
+    source_id: str | None = typer.Option(
+        None, "--source-id", "-s", help="Extract from all pending content in source"
+    ),
+    limit: int = typer.Option(10, "--limit", "-l", help="Maximum items to process"),
+) -> None:
+    """Extract styles from content."""
+
+    async def _extract() -> None:
+        try:
+            firestore = FirestoreService()
+            extraction_service = StyleExtractionService()
+
+            if content_id:
+                # Extract from specific content
+                content_data = await firestore.get_document(
+                    STYLISTIC_CONTENT_COLLECTION, content_id
+                )
+                if not content_data:
+                    logger.error(f"Content {content_id} not found")
+                    raise typer.Exit(1)
+
+                content = StylisticContent.from_firestore_dict(content_data, content_id)
+                profile = await extraction_service.extract_style_profile(content)
+                if profile:
+                    logger.info(f"✓ Extracted profile: {profile.id}")
+                else:
+                    logger.warning(f"Failed to extract profile from {content_id}")
+
+            elif source_id:
+                # Extract from all pending content in source
+                contents_data = await firestore.query_collection(
+                    STYLISTIC_CONTENT_COLLECTION,
+                    filters=[
+                        ("source_id", "==", source_id),
+                        ("status", "==", "pending"),
+                    ],
+                    limit=limit,
+                )
+
+                if not contents_data:
+                    logger.info("No pending content found")
+                    return
+
+                logger.info(f"Processing {len(contents_data)} content items...")
+                extracted = 0
+                for data in contents_data:
+                    content_id_item = data.get("id")
+                    if content_id_item:
+                        content = StylisticContent.from_firestore_dict(data, content_id_item)
+                        profile = await extraction_service.extract_style_profile(content)
+                        if profile:
+                            extracted += 1
+
+                logger.info(f"✓ Extracted {extracted}/{len(contents_data)} profiles")
+            else:
+                logger.error("Must provide either --content-id or --source-id")
+                raise typer.Exit(1)
+
+        except Exception as e:
+            logger.error(f"Failed to extract styles: {e}")
+            raise typer.Exit(1) from e
+
+    asyncio.run(_extract())
 
 
 if __name__ == "__main__":

@@ -13,6 +13,7 @@ from pathlib import Path
 backend_path = Path(__file__).parent.parent / "backend"
 sys.path.insert(0, str(backend_path))
 
+# ruff: noqa: E402
 from src.content.models import TOPIC_CANDIDATES_COLLECTION
 from src.core import get_logger
 from src.infra import FirestoreService

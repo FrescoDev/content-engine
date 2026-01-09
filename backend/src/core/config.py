@@ -25,6 +25,17 @@ class Settings(BaseSettings):
         default=1.0, description="Maximum cost in USD per scoring run (fail fast if exceeded)"
     )
 
+    # Style Enhancement Configuration
+    enable_style_enhancement: bool = Field(
+        default=False, description="Enable style enhancement in content generation"
+    )
+    max_daily_extraction_cost: float = Field(
+        default=5.0, description="Maximum daily cost in USD for style extraction"
+    )
+    max_style_context_tokens: int = Field(
+        default=500, description="Maximum tokens for style context in prompts"
+    )
+
     # Environment
     environment: str = Field(default="local", description="Environment: local, staging, prod")
 

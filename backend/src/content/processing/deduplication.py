@@ -44,10 +44,10 @@ class TopicDeduplicator:
         existing_titles: set[str] = set()
 
         if existing_topics:
-            existing_urls: set[str] = {
+            existing_urls = {
                 str(t.get("source_url")) for t in existing_topics if t.get("source_url") is not None
             }
-            existing_titles: set[str] = {
+            existing_titles = {
                 str(t.get("title", "")).lower().strip()
                 for t in existing_topics
                 if t.get("title") is not None

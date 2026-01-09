@@ -18,6 +18,14 @@ export function getFirebaseAdmin(): { app: App; auth: Auth; firestore: Firestore
 
     // Initialize if not already initialized
     if (getApps().length === 0) {
+        const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID
+        if (!projectId) {
+            throw new Error(
+                "NEXT_PUBLIC_FIREBASE_PROJECT_ID environment variable is required. " +
+                "Please set it in your .env.local file (e.g., NEXT_PUBLIC_FIREBASE_PROJECT_ID=hinsko-dev)"
+            )
+        }
+
         const serviceAccount = process.env.FIREBASE_SERVICE_ACCOUNT_KEY
             ? JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY)
             : undefined
@@ -25,12 +33,13 @@ export function getFirebaseAdmin(): { app: App; auth: Auth; firestore: Firestore
         if (serviceAccount) {
             app = initializeApp({
                 credential: cert(serviceAccount),
-                projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+                projectId,
             })
         } else {
             // Use Application Default Credentials (for GCP environments)
+            // This requires: gcloud auth application-default login
             app = initializeApp({
-                projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+                projectId,
             })
         }
     } else {
@@ -38,7 +47,8 @@ export function getFirebaseAdmin(): { app: App; auth: Auth; firestore: Firestore
     }
 
     auth = getAuth(app)
-    firestore = getFirestore(app, process.env.NEXT_PUBLIC_FIREBASE_DATABASE_ID || "main-db")
+    const databaseId = process.env.NEXT_PUBLIC_FIREBASE_DATABASE_ID || "main-db"
+    firestore = getFirestore(app, databaseId)
 
     return { app, auth, firestore }
 }

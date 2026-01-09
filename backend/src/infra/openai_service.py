@@ -53,7 +53,7 @@ class OpenAIService:
             try:
                 response = await self.client.chat.completions.create(
                     model=model,
-                    messages=messages,
+                    messages=messages,  # type: ignore[arg-type]
                     **kwargs,
                 )
                 content = response.choices[0].message.content
@@ -159,7 +159,7 @@ class OpenAIService:
             try:
                 response = await self.client.chat.completions.create(
                     model=model,
-                    messages=messages,
+                    messages=messages,  # type: ignore[arg-type]
                     **kwargs,
                 )
                 content = response.choices[0].message.content

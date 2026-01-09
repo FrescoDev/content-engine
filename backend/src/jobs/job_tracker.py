@@ -5,7 +5,7 @@ Job execution tracker for auditing and monitoring.
 import traceback
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Literal
 
 from ..content.models import JOB_RUNS_COLLECTION, JobRun
 from ..core import get_logger
@@ -13,10 +13,18 @@ from ..infra import FirestoreService
 
 logger = get_logger(__name__)
 
+JobType = Literal[
+    "topic_ingestion",
+    "topic_scoring",
+    "option_generation",
+    "weekly_learning",
+    "metrics_collection",
+]
+
 
 @asynccontextmanager
 async def track_job_run(
-    job_type: str,
+    job_type: JobType,
     metadata: dict[str, Any] | None = None,
 ):
     """
@@ -39,6 +47,10 @@ async def track_job_run(
         job_type=job_type,
         status="running",
         started_at=started_at,
+        completed_at=None,
+        duration_seconds=None,
+        error_message=None,
+        error_traceback=None,
         metadata=metadata or {},
     )
 

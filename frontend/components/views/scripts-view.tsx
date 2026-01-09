@@ -81,6 +81,8 @@ export function ScriptsView() {
     "youtube_short" | "youtube_long" | "tiktok"
   >("youtube_long");
   const [showBeats, setShowBeats] = useState(false);
+  const [styleProfiles, setStyleProfiles] = useState<Array<{ id: string; source_name: string; tone: string }>>([]);
+  const [selectedStyleId, setSelectedStyleId] = useState<string>("default");
 
   const handleRecording = () => {
     setIsRecording(!isRecording);
@@ -121,6 +123,22 @@ export function ScriptsView() {
       )
     );
   };
+
+  // Fetch approved style profiles
+  useEffect(() => {
+    const fetchStyleProfiles = async () => {
+      try {
+        const response = await fetch("/api/styles/profiles?status=approved&limit=20");
+        const data = await response.json();
+        if (data.success && data.data) {
+          setStyleProfiles(data.data);
+        }
+      } catch (error) {
+        console.error("Failed to fetch style profiles:", error);
+      }
+    };
+    fetchStyleProfiles();
+  }, []);
 
   // Fetch topics with options from API
   useEffect(() => {
@@ -299,8 +317,28 @@ export function ScriptsView() {
               Back to Topics
             </Button>
 
-            {/* Platform and Content Type Selectors */}
+            {/* Style, Platform and Content Type Selectors */}
             <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 mb-6">
+              {/* Style Selector */}
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2 flex-1">
+                <Label className="text-sm text-muted-foreground whitespace-nowrap">
+                  Style:
+                </Label>
+                <Select value={selectedStyleId} onValueChange={setSelectedStyleId}>
+                  <SelectTrigger className="w-full sm:w-[180px]">
+                    <SelectValue placeholder="Select style (optional)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="default">Default (No Style)</SelectItem>
+                    {styleProfiles.map((profile) => (
+                      <SelectItem key={profile.id} value={profile.id}>
+                        {profile.source_name} ({profile.tone})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
               <div className="flex flex-col sm:flex-row sm:items-center gap-2 flex-1">
                 <Label className="text-sm text-muted-foreground whitespace-nowrap">
                   Platform:

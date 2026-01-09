@@ -11,14 +11,17 @@ Usage:
     poetry run python scripts/create_content_options_for_topics.py [--topic-id TOPIC_ID] [--limit N]
 """
 
-import asyncio
 import argparse
+import asyncio
 from datetime import datetime, timezone
 
-from src.core.config import get_settings
+from src.content.models import (
+    CONTENT_OPTIONS_COLLECTION,
+    TOPIC_CANDIDATES_COLLECTION,
+    ContentOption,
+)
 from src.core.logging import get_logger
 from src.infra import FirestoreService, OpenAIService
-from src.content.models import ContentOption, CONTENT_OPTIONS_COLLECTION, TOPIC_CANDIDATES_COLLECTION
 
 logger = get_logger(__name__)
 
@@ -83,10 +86,14 @@ Script:"""
         return script.strip()
     except Exception as e:
         logger.error(f"Failed to generate script: {e}")
-        return f"Let's talk about {topic_title}. This is an interesting topic that deserves attention."
+        return (
+            f"Let's talk about {topic_title}. This is an interesting topic that deserves attention."
+        )
 
 
-async def create_options_for_topic(topic_id: str, topic_title: str, firestore: FirestoreService, openai_service: OpenAIService):
+async def create_options_for_topic(
+    topic_id: str, topic_title: str, firestore: FirestoreService, openai_service: OpenAIService
+):
     """Create hooks and scripts for a topic."""
     logger.info(f"Creating options for topic: {topic_title}")
 
@@ -113,6 +120,11 @@ async def create_options_for_topic(topic_id: str, topic_title: str, firestore: F
             model="gpt-4o-mini",
             metadata={},
             created_at=datetime.now(timezone.utc),
+            edited_content=None,
+            edited_at=None,
+            editor_id=None,
+            edit_history=None,
+            refinement_applied=None,
         )
         await firestore.set_document(CONTENT_OPTIONS_COLLECTION, hook_id, hook.to_firestore_dict())
         hooks.append(hook_id)
@@ -130,6 +142,11 @@ async def create_options_for_topic(topic_id: str, topic_title: str, firestore: F
         model="gpt-4o-mini",
         metadata={},
         created_at=datetime.now(timezone.utc),
+        edited_content=None,
+        edited_at=None,
+        editor_id=None,
+        edit_history=None,
+        refinement_applied=None,
     )
     await firestore.set_document(CONTENT_OPTIONS_COLLECTION, script_id, script.to_firestore_dict())
     logger.info(f"  ✓ Created script: {script_content[:60]}...")
@@ -181,4 +198,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-

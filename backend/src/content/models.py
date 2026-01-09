@@ -16,6 +16,9 @@ AUDIT_EVENTS_COLLECTION = "audit_events"
 CONTENT_METRICS_COLLECTION = "content_metrics"
 PROMPTS_COLLECTION = "prompt_definitions"
 JOB_RUNS_COLLECTION = "job_runs"
+STYLISTIC_SOURCES_COLLECTION = "stylistic_sources"
+STYLISTIC_CONTENT_COLLECTION = "stylistic_content"
+STYLE_PROFILES_COLLECTION = "style_profiles"
 
 
 class TopicCandidate(BaseModel):
@@ -351,6 +354,175 @@ class JobRun(BaseModel):
         if doc_id:
             data["id"] = doc_id
         for field in ["started_at", "completed_at"]:
+            if isinstance(data.get(field), str):
+                data[field] = datetime.fromisoformat(data[field])
+        return cls(**data)
+
+
+class StylisticSource(BaseModel):
+    """Source of stylistic content (Reddit, podcast, etc.)."""
+
+    id: str = Field(..., description="Unique identifier")
+    source_type: Literal["reddit", "podcast", "rss", "youtube", "manual"] = Field(
+        ..., description="Source type"
+    )
+    source_url: str = Field(..., description="URL or identifier")
+    source_name: str = Field(..., description="Human-readable name (e.g., 'r/hiphopheads')")
+    description: str | None = Field(None, description="Optional description")
+    status: Literal["active", "paused", "archived"] = Field(
+        default="active", description="Source status"
+    )
+    tags: list[str] = Field(default_factory=list, description="Tags (e.g., ['hip-hop', 'culture'])")
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc), description="Creation timestamp"
+    )
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc), description="Last update timestamp"
+    )
+    metadata: dict[str, Any] = Field(
+        default_factory=dict, description="Platform-specific configuration"
+    )
+
+    def to_firestore_dict(self) -> dict[str, Any]:
+        """Convert to Firestore-compatible dictionary."""
+        data = self.model_dump()
+        for field in ["created_at", "updated_at"]:
+            if isinstance(data.get(field), datetime):
+                data[field] = data[field].isoformat()
+        return data
+
+    @classmethod
+    def from_firestore_dict(
+        cls, data: dict[str, Any], doc_id: str | None = None
+    ) -> "StylisticSource":
+        """Create from Firestore dictionary."""
+        if doc_id:
+            data["id"] = doc_id
+        for field in ["created_at", "updated_at"]:
+            if isinstance(data.get(field), str):
+                data[field] = datetime.fromisoformat(data[field])
+        return cls(**data)
+
+
+class StylisticContent(BaseModel):
+    """Raw content fetched from stylistic sources."""
+
+    id: str = Field(..., description="Unique identifier")
+    source_id: str = Field(..., description="Reference to StylisticSource")
+    content_type: Literal["text", "transcript", "comment", "post"] = Field(
+        ..., description="Content type"
+    )
+    raw_text: str = Field(..., description="The actual content")
+    source_url: str | None = Field(None, description="Link to original")
+    published_at: datetime = Field(..., description="Publication timestamp")
+    author: str | None = Field(None, description="Author identifier")
+    engagement_score: int | None = Field(None, description="Upvotes, likes, etc.")
+    raw_payload: dict[str, Any] = Field(
+        default_factory=dict, description="Original API data"
+    )
+    status: Literal["pending", "processing", "processed", "failed", "skipped"] = Field(
+        default="pending", description="Processing status"
+    )
+    extraction_attempts: int = Field(default=0, description="Number of extraction attempts")
+    last_extraction_error: str | None = Field(
+        None, description="Last extraction error message"
+    )
+    profile_id: str | None = Field(None, description="Link to created StyleProfile")
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc), description="Creation timestamp"
+    )
+
+    def to_firestore_dict(self) -> dict[str, Any]:
+        """Convert to Firestore-compatible dictionary."""
+        data = self.model_dump()
+        for field in ["created_at", "published_at"]:
+            if isinstance(data.get(field), datetime):
+                data[field] = data[field].isoformat()
+        return data
+
+    @classmethod
+    def from_firestore_dict(
+        cls, data: dict[str, Any], doc_id: str | None = None
+    ) -> "StylisticContent":
+        """Create from Firestore dictionary."""
+        if doc_id:
+            data["id"] = doc_id
+        for field in ["created_at", "published_at"]:
+            if isinstance(data.get(field), str):
+                data[field] = datetime.fromisoformat(data[field])
+        return cls(**data)
+
+
+class StyleProfile(BaseModel):
+    """Extracted stylistic profile from content."""
+
+    id: str = Field(..., description="Unique identifier")
+    source_content_id: str = Field(..., description="Reference to StylisticContent")
+    source_id: str = Field(..., description="Reference to StylisticSource")
+    source_name: str = Field(..., description="Denormalized source name for quick access")
+    writing_style: dict[str, Any] = Field(
+        default_factory=dict, description="Sentence structure, vocabulary, etc."
+    )
+    speaking_style: dict[str, Any] = Field(
+        default_factory=dict, description="Natural speech patterns, tone"
+    )
+    literary_devices: list[str] = Field(
+        default_factory=list, description="e.g., ['humor', 'puns', 'alliteration']"
+    )
+    cultural_markers: list[str] = Field(
+        default_factory=list, description="e.g., ['meme references', 'trends', 'slang']"
+    )
+    tone: str = Field(..., description="e.g., 'casual', 'witty', 'serious', 'comedic'")
+    voice_characteristics: dict[str, Any] = Field(
+        default_factory=dict, description="Detailed voice analysis"
+    )
+    example_phrases: list[str] = Field(
+        default_factory=list, description="Representative phrases (minimum 3)"
+    )
+    example_patterns: list[str] = Field(
+        default_factory=list, description="Stylistic patterns observed"
+    )
+    status: Literal["pending", "approved", "rejected", "archived", "needs_review"] = Field(
+        default="pending", description="Curation status"
+    )
+    curator_notes: str | None = Field(None, description="Human curator notes")
+    curated_by: str | None = Field(None, description="User ID who curated")
+    curated_at: datetime | None = Field(None, description="Curation timestamp")
+    quality_score: float | None = Field(None, description="Quality score 0-1")
+    quality_issues: list[str] = Field(
+        default_factory=list, description="Validation issues found"
+    )
+    tags: list[str] = Field(default_factory=list, description="Tags for categorization")
+    category: str | None = Field(None, description="e.g., 'hip-hop-culture', 'podcast-banter'")
+    extraction_model: str = Field(..., description="LLM model used (e.g., 'gpt-4o-mini')")
+    extraction_prompt_version: str = Field(
+        ..., description="Prompt version used (e.g., 'extraction_v1')"
+    )
+    extraction_cost_usd: float = Field(default=0.0, description="Cost of extraction")
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc), description="Creation timestamp"
+    )
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc), description="Last update timestamp"
+    )
+    archived_at: datetime | None = Field(None, description="Archive timestamp (soft delete)")
+
+    def to_firestore_dict(self) -> dict[str, Any]:
+        """Convert to Firestore-compatible dictionary."""
+        data = self.model_dump()
+        for field in ["created_at", "updated_at", "curated_at", "archived_at"]:
+            if isinstance(data.get(field), datetime):
+                data[field] = data[field].isoformat()
+        return data
+
+    @classmethod
+    def from_firestore_dict(
+        cls, data: dict[str, Any], doc_id: str | None = None
+    ) -> "StyleProfile":
+        """Create from Firestore dictionary."""
+        if doc_id:
+            data["id"] = doc_id
+        for field in ["created_at", "updated_at", "curated_at", "archived_at"]:
             if isinstance(data.get(field), str):
                 data[field] = datetime.fromisoformat(data[field])
         return cls(**data)

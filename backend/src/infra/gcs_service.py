@@ -36,6 +36,8 @@ class GCSService:
         """Get GCS client."""
         if not self._client:
             self._initialize_client()
+        if not self._client:
+            raise RuntimeError("GCS client not initialized. Check GCP credentials configuration.")
         return self._client
 
     async def upload_bytes(

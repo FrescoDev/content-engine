@@ -34,3 +34,7 @@ class IngestionSource(Protocol):
     async def fetch_topics(self, limit: int = 25) -> list[RawTopicData]:
         """Fetch topics from source."""
         ...
+
+
+
+

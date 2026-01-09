@@ -4,7 +4,7 @@ import type { ReactNode } from "react"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { LayoutDashboard, FileText, Shield, History, BarChart3, Sparkles, Menu, X, Settings } from "lucide-react"
+import { LayoutDashboard, FileText, Shield, History, BarChart3, Sparkles, Menu, X, Settings, Palette } from "lucide-react"
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Toaster } from "@/components/ui/toaster"
@@ -16,6 +16,7 @@ interface AppShellProps {
 const navigation = [
   { name: "Today", href: "/today", icon: LayoutDashboard },
   { name: "Scripts", href: "/scripts", icon: FileText },
+  { name: "Styles", href: "/styles", icon: Palette },
   { name: "Integrity", href: "/integrity", icon: Shield },
   { name: "History", href: "/history", icon: History },
   { name: "Performance", href: "/performance", icon: BarChart3 },

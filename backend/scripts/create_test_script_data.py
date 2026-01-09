@@ -12,10 +12,14 @@ import asyncio
 import hashlib
 from datetime import datetime, timezone
 
-from src.core.config import get_settings
+from src.content.models import (
+    CONTENT_OPTIONS_COLLECTION,
+    TOPIC_CANDIDATES_COLLECTION,
+    ContentOption,
+    TopicCandidate,
+)
 from src.core.logging import get_logger
 from src.infra import FirestoreService
-from src.content.models import TopicCandidate, ContentOption, TOPIC_CANDIDATES_COLLECTION, CONTENT_OPTIONS_COLLECTION
 
 logger = get_logger(__name__)
 
@@ -23,7 +27,6 @@ logger = get_logger(__name__)
 async def create_test_data():
     """Create test topic and content options."""
     firestore = FirestoreService()
-    settings = get_settings()
 
     # Create test topic
     topic_title = "Anthropic Releases Claude 3.5 with Extended Context"
@@ -64,6 +67,11 @@ async def create_test_data():
             model="gpt-4o-mini",
             metadata={},
             created_at=datetime.now(timezone.utc),
+            edited_content=None,
+            edited_at=None,
+            editor_id=None,
+            edit_history=None,
+            refinement_applied=None,
         )
         await firestore.set_document(CONTENT_OPTIONS_COLLECTION, hook_id, hook.to_firestore_dict())
         hook_ids.append(hook_id)
@@ -90,17 +98,23 @@ The race for longer context continues, but quality matters more than length. Ant
         model="gpt-4o-mini",
         metadata={},
         created_at=datetime.now(timezone.utc),
+        edited_content=None,
+        edited_at=None,
+        editor_id=None,
+        edit_history=None,
+        refinement_applied=None,
     )
     await firestore.set_document(CONTENT_OPTIONS_COLLECTION, script_id, script.to_firestore_dict())
     logger.info(f"✓ Created script: {script_id}")
 
-    logger.info(f"\n✓ Test data created successfully!")
+    logger.info("\n✓ Test data created successfully!")
     logger.info(f"  Topic ID: {topic_id}")
     logger.info(f"  Hooks: {len(hook_ids)}")
-    logger.info(f"  Scripts: 1")
-    logger.info(f"\nYou can now test the scripts view at: http://localhost:3000/scripts?topic={topic_id}")
+    logger.info("  Scripts: 1")
+    logger.info(
+        f"\nYou can now test the scripts view at: http://localhost:3000/scripts?topic={topic_id}"
+    )
 
 
 if __name__ == "__main__":
     asyncio.run(create_test_data())
-

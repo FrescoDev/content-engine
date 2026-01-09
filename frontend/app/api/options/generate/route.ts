@@ -13,6 +13,7 @@ export async function POST(request: NextRequest) {
         const body = await request.json()
         const topicId = body.topic_id as string | undefined
         const limit = body.limit ? parseInt(body.limit as string) : 5
+        const styleProfileId = body.style_profile_id as string | undefined
 
         // Import OpenAI dynamically
         const { OpenAI } = await import("openai")
@@ -22,9 +23,66 @@ export async function POST(request: NextRequest) {
             return errorResponse("OpenAI API key not configured", ApiErrorCode.INTERNAL_ERROR, 500)
         }
 
+        // Helper function to enhance prompt with style
+        const enhancePrompt = async (basePrompt: string): Promise<string> => {
+            if (!styleProfileId || process.env.ENABLE_STYLE_ENHANCEMENT !== "true") {
+                return basePrompt
+            }
+
+            try {
+                // Fetch style profile
+                const profileDoc = await firestore
+                    .collection("style_profiles")
+                    .doc(styleProfileId)
+                    .get()
+
+                if (!profileDoc.exists) {
+                    console.warn(`Style profile ${styleProfileId} not found, using base prompt`)
+                    return basePrompt
+                }
+
+                const profile = profileDoc.data()
+                if (!profile || profile.status !== "approved") {
+                    console.warn(`Style profile ${styleProfileId} not approved, using base prompt`)
+                    return basePrompt
+                }
+
+                // Build style context (compressed)
+                const styleParts: string[] = []
+                if (profile.tone) {
+                    styleParts.push(`Tone: ${profile.tone}`)
+                }
+                if (profile.example_phrases && profile.example_phrases.length > 0) {
+                    const examples = profile.example_phrases.slice(0, 3)
+                    const examplesText = examples.map((e: string) => `"${e.substring(0, 100)}"`).join(", ")
+                    styleParts.push(`Example phrases: ${examplesText}`)
+                }
+                if (profile.literary_devices && profile.literary_devices.length > 0) {
+                    const devices = profile.literary_devices.slice(0, 5).join(", ")
+                    styleParts.push(`Literary devices: ${devices}`)
+                }
+
+                if (styleParts.length === 0) {
+                    return basePrompt
+                }
+
+                const styleContext = styleParts.join("\n")
+                // Truncate to ~500 tokens (roughly 2000 chars)
+                const maxChars = 2000
+                const truncatedContext = styleContext.length > maxChars
+                    ? styleContext.substring(0, maxChars) + "..."
+                    : styleContext
+
+                return `${basePrompt}\n\nSTYLISTIC CONTEXT:\n${truncatedContext}\n\nWhen generating content, incorporate these stylistic elements naturally while maintaining the core message.`
+            } catch (error) {
+                console.error("Style enhancement failed:", error)
+                return basePrompt // Always fallback
+            }
+        }
+
         // Helper function to generate hook
         const generateHook = async (topicTitle: string): Promise<string> => {
-            const prompt = `Generate a short, engaging hook (1-2 sentences) for a short-form video about:
+            const basePrompt = `Generate a short, engaging hook (1-2 sentences) for a short-form video about:
 
 ${topicTitle}
 
@@ -35,6 +93,8 @@ The hook should:
 - Sound natural and not clickbait-y
 
 Hook:`
+
+            const prompt = await enhancePrompt(basePrompt)
 
             const completion = await openai.chat.completions.create({
                 model: "gpt-4o-mini",
@@ -54,7 +114,7 @@ Hook:`
 
         // Helper function to generate script
         const generateScript = async (topicTitle: string): Promise<string> => {
-            const prompt = `Write a short-form video script (2-3 paragraphs) about:
+            const basePrompt = `Write a short-form video script (2-3 paragraphs) about:
 
 ${topicTitle}
 
@@ -66,6 +126,8 @@ The script should:
 - Be around 150-200 words
 
 Script:`
+
+            const prompt = await enhancePrompt(basePrompt)
 
             const completion = await openai.chat.completions.create({
                 model: "gpt-4o-mini",
@@ -122,7 +184,7 @@ Script:`
                     content: hookContent,
                     prompt_version: "short_hook_v1",
                     model: "gpt-4o-mini",
-                    metadata: {},
+                    metadata: styleProfileId ? { style_profile_id: styleProfileId } : {},
                     created_at: new Date().toISOString(),
                 })
                 hooksCreated.push(hookId)
@@ -138,7 +200,7 @@ Script:`
                 content: scriptContent,
                 prompt_version: "short_script_v1",
                 model: "gpt-4o-mini",
-                metadata: {},
+                metadata: styleProfileId ? { style_profile_id: styleProfileId } : {},
                 created_at: new Date().toISOString(),
             })
 
@@ -195,7 +257,7 @@ Script:`
                         content: hookContent,
                         prompt_version: "short_hook_v1",
                         model: "gpt-4o-mini",
-                        metadata: {},
+                        metadata: styleProfileId ? { style_profile_id: styleProfileId } : {},
                         created_at: new Date().toISOString(),
                     })
                     hooksCreated.push(hookId)
@@ -211,7 +273,7 @@ Script:`
                     content: scriptContent,
                     prompt_version: "short_script_v1",
                     model: "gpt-4o-mini",
-                    metadata: {},
+                    metadata: styleProfileId ? { style_profile_id: styleProfileId } : {},
                     created_at: new Date().toISOString(),
                 })
 

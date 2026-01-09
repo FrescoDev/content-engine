@@ -28,9 +28,21 @@ class FirestoreService:
         try:
             # Allow lazy initialization - don't fail if GCP_PROJECT_ID not set
             # This allows the service to be imported without full GCP setup
+            settings = get_settings()
+            project_id = settings.gcp_project_id
+
             if self.database_id:
-                self._client = firestore.Client(database=self.database_id)
-                logger.info(f"Firestore client initialized (database: {self.database_id})")
+                # Use project_id from settings if available, otherwise let ADC use default
+                if project_id:
+                    self._client = firestore.Client(project=project_id, database=self.database_id)
+                    logger.info(
+                        f"Firestore client initialized (project: {project_id}, database: {self.database_id})"
+                    )
+                else:
+                    self._client = firestore.Client(database=self.database_id)
+                    logger.info(
+                        f"Firestore client initialized (database: {self.database_id}, using ADC default project)"
+                    )
             else:
                 logger.warning("Firestore database_id not configured - client will be None")
         except Exception as e:
@@ -43,6 +55,10 @@ class FirestoreService:
         """Get Firestore client."""
         if not self._client:
             self._initialize_client()
+        if not self._client:
+            raise RuntimeError(
+                "Firestore client not initialized. Check GCP credentials and database_id configuration."
+            )
         return self._client
 
     async def get_document(self, collection: str, doc_id: str) -> dict[str, Any] | None:

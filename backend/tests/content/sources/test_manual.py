@@ -38,3 +38,7 @@ def test_create_manual_topic_minimal():
     assert topic.source_url is None
     assert topic.raw_payload == {}
     assert topic.author is None
+
+
+
+

@@ -1,0 +1,11 @@
+#!/usr/bin/env python3
+"""
+Direct wrapper for review commands to bypass typer integration issues.
+"""
+import sys
+from src.cli.review import review_app
+
+if __name__ == "__main__":
+    sys.argv = ["review"] + sys.argv[1:]
+    review_app()
+

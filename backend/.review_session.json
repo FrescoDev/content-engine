@@ -1,0 +1,20 @@
+{
+  "workflow": "topics",
+  "processed_ids": [
+    "rss-1767911929-2e5b95ae",
+    "rss-1767911929-5a03318a"
+  ],
+  "stats": {
+    "approved": 1,
+    "rejected": 1,
+    "deferred": 0,
+    "skipped": 0
+  },
+  "last_action": {
+    "topic_id": "rss-1767911929-5a03318a",
+    "old_status": "pending",
+    "new_status": "rejected",
+    "action": "r"
+  },
+  "saved_at": "2026-01-08T23:59:42.464001+00:00"
+}
